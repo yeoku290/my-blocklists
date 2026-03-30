@@ -15,32 +15,27 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # 確保抓取所有檔案紀錄
 
       - name: Download and Merge files
         run: |
-          # 1. 下載原始檔案 (使用暫存檔名)
-          echo "Downloading remote files..."
+          # 1. 下載原始檔案
           curl -sSL "https://raw.githubusercontent.com/dragoinformatica/dpt-blocklists/refs/heads/main/iplist.ipset" -o iplist.ipset
           curl -sSL "https://raw.githubusercontent.com/bol-van/rulist/refs/heads/main/reestr_hostname.txt" -o reestr_hostname.txt.remote
 
-          # 2. 處理 reestr_hostname.txt 的合併
+          # 2. 合併邏輯 (拿掉排序，改為強制附加在最後)
           if [ -f "edit.txt" ]; then
-            echo "Found edit.txt, merging now..."
-            
-            # 確保 edit.txt 最後一行有換行符號，避免合併時首尾相黏
-            sed -i '$a\' edit.txt
-            
-            # 將遠端檔案與本地 edit.txt 合併
-            cat reestr_hostname.txt.remote edit.txt > reestr_hostname.txt.merged
-            
-            # 3. 自動去重並排序 (確保清單乾淨且不重複)
-            sort -u reestr_hostname.txt.merged > reestr_hostname.txt
-            
-            # 清理暫存檔案
-            rm reestr_hostname.txt.remote reestr_hostname.txt.merged
-            echo "Merge and Sort complete!"
+            echo "--- 偵測到 edit.txt，開始合併 ---"
+            # 複製一份原始檔作為基礎
+            cp reestr_hostname.txt.remote reestr_hostname.txt
+            # 確保檔案末尾有換行
+            sed -i '$a\' reestr_hostname.txt
+            # 把 edit.txt 內容直接接在後面
+            cat edit.txt >> reestr_hostname.txt
+            echo "--- 合併完成 ---"
           else
-            echo "Warning: edit.txt not found in root! Using remote version only."
+            echo "!!! 錯誤：找不到 edit.txt !!!"
             mv reestr_hostname.txt.remote reestr_hostname.txt
           fi
 
@@ -49,13 +44,11 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           
-          # 將變動加入索引
           git add iplist.ipset reestr_hostname.txt
           
-          # 檢查是否有變動
           if git diff --staged --quiet; then
-            echo "No changes detected in either file."
+            echo "No changes detected."
           else
-            git commit -m "Automated update & merge: $(date +'%Y-%m-%d %H:%M:%S')"
+            git commit -m "Manual sync and merge edit.txt: $(date +'%Y-%m-%d %H:%M:%S')"
             git push
           fi
