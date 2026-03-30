@@ -17,37 +17,38 @@ jobs:
 
       - name: Download and Merge files
         run: |
-          # 1. 下載原始檔案
+          # 1. 偵錯：看看 edit.txt 到底長怎樣
+          echo "--- DEBUG: edit.txt 內容檢查 ---"
+          if [ -f "edit.txt" ]; then
+            cat -A edit.txt  # -A 可以看到隱藏的換行符號和結束符號
+            wc -l edit.txt
+          else
+            echo "找不到 edit.txt"
+          fi
+
+          # 2. 下載原始檔案
           curl -sSL "https://raw.githubusercontent.com/dragoinformatica/dpt-blocklists/refs/heads/main/iplist.ipset" -o iplist.ipset
           curl -sSL "https://raw.githubusercontent.com/bol-van/rulist/refs/heads/main/reestr_hostname.txt" -o reestr_hostname.txt.remote
 
-          # 2. 合併邏輯：這次把自定義內容放在最前面
+          # 3. 重新強制建立檔案 (確保沒有任何奇怪的緩存)
+          # 先寫入日期
+          echo "# Update: $(date +'%Y-%m-%d %H:%M:%S')" > reestr_hostname.txt
+          
+          # 寫入 edit.txt 內容
           if [ -f "edit.txt" ]; then
-            echo "--- 偵測到 edit.txt，開始【置頂】合併 ---"
-            
-            # 第一行：更新時間標記
-            echo "# Last Updated: $(date +'%Y-%m-%d %H:%M:%S')" > reestr_hostname.txt
-            
-            # 第二區塊：你的自定義內容 (置頂)
-            echo "# --- MY CUSTOM LIST START ---" >> reestr_hostname.txt
-            cat edit.txt >> reestr_hostname.txt
-            echo "" >> reestr_hostname.txt # 強制換行
-            echo "# --- MY CUSTOM LIST END ---" >> reestr_hostname.txt
-            echo "" >> reestr_hostname.txt # 強制換行
-            
-            # 第三區塊：原始遠端內容
-            cat reestr_hostname.txt.remote >> reestr_hostname.txt
-            
-            echo "--- 合併完成 ---"
-          else
-            mv reestr_hostname.txt.remote reestr_hostname.txt
+            echo "# --- CUSTOM START ---" >> reestr_hostname.txt
+            # 使用 sed 確保每一行都正確寫入，不受編碼影響
+            sed 'p' edit.txt >> reestr_hostname.txt
+            echo "# --- CUSTOM END ---" >> reestr_hostname.txt
           fi
+          
+          # 寫入遠端內容
+          cat reestr_hostname.txt.remote >> reestr_hostname.txt
 
       - name: Commit and Push if changed
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add iplist.ipset reestr_hostname.txt
-          
-          git commit -m "置頂合併 edit.txt: $(date +'%Y-%m-%d %H:%M:%S')"
+          git commit -m "Debug Merge: $(date +'%Y-%m-%d %H:%M:%S')"
           git push
