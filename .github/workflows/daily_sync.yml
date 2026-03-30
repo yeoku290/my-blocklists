@@ -14,8 +14,6 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Download and Merge files
         run: |
@@ -23,20 +21,22 @@ jobs:
           curl -sSL "https://raw.githubusercontent.com/dragoinformatica/dpt-blocklists/refs/heads/main/iplist.ipset" -o iplist.ipset
           curl -sSL "https://raw.githubusercontent.com/bol-van/rulist/refs/heads/main/reestr_hostname.txt" -o reestr_hostname.txt.remote
 
-          # 2. 合併邏輯
+          # 2. 合併邏輯：這次把自定義內容放在最前面
           if [ -f "edit.txt" ]; then
-            echo "--- 偵測到 edit.txt，開始強制合併 ---"
+            echo "--- 偵測到 edit.txt，開始【置頂】合併 ---"
             
-            # 先建立一個乾淨的新檔案，第一行放更新時間 (當作標記)
+            # 第一行：更新時間標記
             echo "# Last Updated: $(date +'%Y-%m-%d %H:%M:%S')" > reestr_hostname.txt
             
-            # 接著放入遠端原始內容
-            cat reestr_hostname.txt.remote >> reestr_hostname.txt
-            
-            # 最後放入你的 edit.txt 內容
-            echo "" >> reestr_hostname.txt
+            # 第二區塊：你的自定義內容 (置頂)
             echo "# --- MY CUSTOM LIST START ---" >> reestr_hostname.txt
             cat edit.txt >> reestr_hostname.txt
+            echo "" >> reestr_hostname.txt # 強制換行
+            echo "# --- MY CUSTOM LIST END ---" >> reestr_hostname.txt
+            echo "" >> reestr_hostname.txt # 強制換行
+            
+            # 第三區塊：原始遠端內容
+            cat reestr_hostname.txt.remote >> reestr_hostname.txt
             
             echo "--- 合併完成 ---"
           else
@@ -49,6 +49,5 @@ jobs:
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add iplist.ipset reestr_hostname.txt
           
-          # 強制提交，即便只有時間標記改變也會更新
-          git commit -m "Force sync with timestamp: $(date +'%Y-%m-%d %H:%M:%S')"
+          git commit -m "置頂合併 edit.txt: $(date +'%Y-%m-%d %H:%M:%S')"
           git push
