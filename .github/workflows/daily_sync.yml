@@ -16,18 +16,23 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Download the latest iplist
+      - name: Download the latest files
         run: |
+          # 下載第一個檔案 (iplist.ipset)
           curl -sSL "https://raw.githubusercontent.com/dragoinformatica/dpt-blocklists/refs/heads/main/iplist.ipset" -o iplist.ipset
+          
+          # 下載第二個檔案 (reestr_hostname.txt)
+          curl -sSL "https://raw.githubusercontent.com/bol-van/rulist/refs/heads/main/reestr_hostname.txt" -o reestr_hostname.txt
 
       - name: Commit and Push if changed
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git add iplist.ipset
-          # 檢查是否有變動，避免無意義的提交
+          git add iplist.ipset reestr_hostname.txt
+          
+          # 檢查是否有任何檔案變動
           if git diff --staged --quiet; then
-            echo "No changes detected."
+            echo "No changes detected in either file."
           else
             git commit -m "Automated update: $(date +'%Y-%m-%d %H:%M:%S')"
             git push
