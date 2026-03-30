@@ -16,24 +16,42 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Download the latest files
+      - name: Download and Merge files
         run: |
-          # 下載第一個檔案 (iplist.ipset)
+          # 1. 下載原始檔案
+          echo "Downloading iplist.ipset..."
           curl -sSL "https://raw.githubusercontent.com/dragoinformatica/dpt-blocklists/refs/heads/main/iplist.ipset" -o iplist.ipset
           
-          # 下載第二個檔案 (reestr_hostname.txt)
-          curl -sSL "https://raw.githubusercontent.com/bol-van/rulist/refs/heads/main/reestr_hostname.txt" -o reestr_hostname.txt
+          echo "Downloading reestr_hostname.txt..."
+          curl -sSL "https://raw.githubusercontent.com/bol-van/rulist/refs/heads/main/reestr_hostname.txt" -o reestr_hostname.txt.tmp
+
+          # 2. 合併 edit.txt
+          if [ -f "edit.txt" ]; then
+            echo "Merging edit.txt into reestr_hostname.txt..."
+            cat reestr_hostname.txt.tmp edit.txt > reestr_hostname.txt.merged
+            
+            # 3. 選項：自動去重並排序 (如果不需要排序，可以直接 mv 改名)
+            sort -u reestr_hostname.txt.merged > reestr_hostname.txt
+            
+            # 清理暫存檔
+            rm reestr_hostname.txt.tmp reestr_hostname.txt.merged
+          else
+            echo "edit.txt not found, using original file."
+            mv reestr_hostname.txt.tmp reestr_hostname.txt
+          fi
 
       - name: Commit and Push if changed
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # 將變動加入索引
           git add iplist.ipset reestr_hostname.txt
           
-          # 檢查是否有任何檔案變動
+          # 檢查是否有變動
           if git diff --staged --quiet; then
-            echo "No changes detected in either file."
+            echo "No changes detected."
           else
-            git commit -m "Automated update: $(date +'%Y-%m-%d %H:%M:%S')"
+            git commit -m "Automated update & merge: $(date +'%Y-%m-%d %H:%M:%S')"
             git push
           fi
