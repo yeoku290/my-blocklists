@@ -2,8 +2,9 @@ name: Daily IPSet Sync
 
 on:
   schedule:
+    # 每天台灣時間凌晨 04:00 執行 (UTC 20:00)
     - cron: '0 20 * * *'
-  workflow_dispatch:
+  workflow_dispatch: # 允許手動點擊按鍵執行
 
 jobs:
   sync:
@@ -15,40 +16,40 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Download and Merge files
+      - name: Download and Merge with De-duplication
         run: |
-          # 1. 偵錯：看看 edit.txt 到底長怎樣
-          echo "--- DEBUG: edit.txt 內容檢查 ---"
-          if [ -f "edit.txt" ]; then
-            cat -A edit.txt  # -A 可以看到隱藏的換行符號和結束符號
-            wc -l edit.txt
-          else
-            echo "找不到 edit.txt"
-          fi
-
-          # 2. 下載原始檔案
+          # 1. 下載原始檔案
           curl -sSL "https://raw.githubusercontent.com/dragoinformatica/dpt-blocklists/refs/heads/main/iplist.ipset" -o iplist.ipset
           curl -sSL "https://raw.githubusercontent.com/bol-van/rulist/refs/heads/main/reestr_hostname.txt" -o reestr_hostname.txt.remote
 
-          # 3. 重新強制建立檔案 (確保沒有任何奇怪的緩存)
-          # 先寫入日期
-          echo "# Update: $(date +'%Y-%m-%d %H:%M:%S')" > reestr_hostname.txt
-          
-          # 寫入 edit.txt 內容
+          # 2. 合併與去重邏輯
           if [ -f "edit.txt" ]; then
-            echo "# --- CUSTOM START ---" >> reestr_hostname.txt
-            # 使用 sed 確保每一行都正確寫入，不受編碼影響
-            sed 'p' edit.txt >> reestr_hostname.txt
-            echo "# --- CUSTOM END ---" >> reestr_hostname.txt
+            echo "--- 偵測到 edit.txt，執行去重合併 ---"
+            
+            # 先將遠端檔案與本地 edit.txt 合併到一個臨時檔
+            cat reestr_hostname.txt.remote edit.txt > temp_merge.txt
+            
+            # 使用 sort -u 移除重複行，並寫回正式檔案
+            # 這樣即便每天跑，相同的網址也只會留下一行
+            sort -u temp_merge.txt > reestr_hostname.txt
+            
+            # 加回時間標記 (放在檔案最前面)
+            sed -i "1i # Last Updated: $(date +'%Y-%m-%d %H:%M:%S')" reestr_hostname.txt
+            
+            rm reestr_hostname.txt.remote temp_merge.txt
+          else
+            mv reestr_hostname.txt.remote reestr_hostname.txt
           fi
-          
-          # 寫入遠端內容
-          cat reestr_hostname.txt.remote >> reestr_hostname.txt
 
       - name: Commit and Push if changed
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add iplist.ipset reestr_hostname.txt
-          git commit -m "Debug Merge: $(date +'%Y-%m-%d %H:%M:%S')"
-          git push
+          
+          if git diff --staged --quiet; then
+            echo "內容無變動，跳過提交。"
+          else
+            git commit -m "Automated sync with de-duplication: $(date +'%Y-%m-%d %H:%M:%S')"
+            git push
+          fi
